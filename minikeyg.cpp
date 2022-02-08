@@ -41,6 +41,7 @@ int THREADS = 1;
 
 int FLAG_COINBUFFER = 0;
 int FLAG_VERIFIED = 1;
+int FLAG_RANDOM = 0;
 int FLAG_MINIKEY = 0;
 int FLAG_SIZE = 0;
 int SIZE_VALUE = 0;
@@ -48,6 +49,7 @@ int INCREMENT_OFFSET = 0;
 
 char *user_minikey;
 int user_size;
+FILE *fd;
 
 char minikey[40] = {0};
 unsigned char raw_minikey[40];
@@ -56,6 +58,8 @@ pthread_mutex_t thread_mutex;
 
 bool increment_minikey_index(char *buffer,unsigned char *rawbuffer,int index);
 
+void bin2alphabet(unsigned char *buffer,int length);
+
 void sha256sse_23(uint8_t *src0, uint8_t *src1, uint8_t *src2, uint8_t *src3, uint8_t *dst0, uint8_t *dst1, uint8_t *dst2, uint8_t *dst3);
 void sha256sse_31(uint8_t *src0, uint8_t *src1, uint8_t *src2, uint8_t *src3, uint8_t *dst0, uint8_t *dst1, uint8_t *dst2, uint8_t *dst3);
 
@@ -63,14 +67,22 @@ void *process_verified22(void *vargp);
 void *process_verified30(void *vargp);
 void *process_unverified(void *vargp);
 
+void *process_verified22_random(void *vargp);
+void *process_verified30_random(void *vargp);
+void *process_unverified_random(void *vargp);
+
+
 int main(int argc, char **argv)	{
-	FILE *fd;
+	
 	char *r_str;
 	int len,i,s;
 	pthread_t tid ;
 	char c;
-	while ((c = getopt(argc, argv, "ua:m:s:t:")) != -1) {
+	while ((c = getopt(argc, argv, "a:m:s:t:ur")) != -1) {
 		switch(c){
+			case 'r':
+				FLAG_RANDOM = 1;
+			break;
 			case 'u':
 				FLAG_VERIFIED = 0;
 			break;
@@ -81,6 +93,9 @@ int main(int argc, char **argv)	{
 			case 'a':
 				FLAG_COINBUFFER = 1;
 				Ccoinbuffer = optarg;
+				Ccoinbuffer_length = strlen(Ccoinbuffer);
+				Ccoinbuffer_mod = Ccoinbuffer_length -1;
+
 			break;
 			case 's':
 				user_size = (int)strtol(optarg,NULL,10);
@@ -113,64 +128,90 @@ int main(int argc, char **argv)	{
 	}
 	if(FLAG_COINBUFFER == 0)	{
 		Ccoinbuffer = (char*) Ccoinbuffer_default;
+		Ccoinbuffer_length = strlen(Ccoinbuffer);
+		Ccoinbuffer_mod = Ccoinbuffer_length -1;
 	}
-	Ccoinbuffer_length = strlen(Ccoinbuffer);
-	Ccoinbuffer_mod = Ccoinbuffer_length -1;
-	if(FLAG_MINIKEY)	{
-		len = strlen(user_minikey);
-		switch(len)	{
-			case 22:
-			case 30:
-				if(FLAG_SIZE && SIZE_VALUE != len)	{
-					fprintf(stderr,"Size mismatch %i != %i (%s)\n",SIZE_VALUE,len,user_minikey);
-					exit(0);
-				}
-				else	{
-					SIZE_VALUE = len;
-					INCREMENT_OFFSET = SIZE_VALUE -1;
-				}
-				strcpy(minikey,user_minikey);
-				for(i = 0; i< SIZE_VALUE; i++)	{
-					r_str = strchr(Ccoinbuffer,user_minikey[i]);
-					if(r_str == NULL)	{
-						fprintf(stderr,"Invalid minikey %s have invalid character %c\n",user_minikey,user_minikey[i]);
-						exit(0);
-					}
-					raw_minikey[i] = (int)(r_str - Ccoinbuffer) % Ccoinbuffer_length;
-				}
-			break;
-			default:
-				fprintf(stderr,"Invalid size %i: %s\n",len,user_minikey);
-				exit(0);
-			break;
-		}
-	}
-	else	{
+
+	
+	if(FLAG_RANDOM)	{
 		fd = fopen("/dev/urandom","r");
 		if(fd == NULL)	{
 			fprintf(stderr,"Can't open /dev/urandom\n");
 			exit(0);
 		}
-		fread(raw_minikey,sizeof(char),SIZE_VALUE,fd);
-		fclose(fd);
-		raw_minikey[0] = 25;
-		minikey[0] = 'S';
-		for(i = 1; i < SIZE_VALUE; i++)	{
-			raw_minikey[i] = raw_minikey[i] % Ccoinbuffer_length;
-			minikey[i] = Ccoinbuffer[raw_minikey[i]];
+	}
+	else	{
+		if(FLAG_MINIKEY)	{
+			len = strlen(user_minikey);
+			switch(len)	{
+				case 22:
+				case 30:
+					if(FLAG_SIZE && SIZE_VALUE != len)	{
+						fprintf(stderr,"Size mismatch %i != %i (%s)\n",SIZE_VALUE,len,user_minikey);
+						exit(0);
+					}
+					else	{
+						SIZE_VALUE = len;
+						INCREMENT_OFFSET = SIZE_VALUE -1;
+					}
+					strcpy(minikey,user_minikey);
+					for(i = 0; i< SIZE_VALUE; i++)	{
+						r_str = strchr(Ccoinbuffer,user_minikey[i]);
+						if(r_str == NULL)	{
+							fprintf(stderr,"Invalid minikey %s have invalid character %c\n",user_minikey,user_minikey[i]);
+							exit(0);
+						}
+						raw_minikey[i] = (int)(r_str - Ccoinbuffer) % Ccoinbuffer_length;
+					}
+				break;
+				default:
+					fprintf(stderr,"Invalid size %i: %s\n",len,user_minikey);
+					exit(0);
+				break;
+			}
+		}
+		else	{
+			fd = fopen("/dev/urandom","r");
+			if(fd == NULL)	{
+				fprintf(stderr,"Can't open /dev/urandom\n");
+				exit(0);
+			}
+			fread(raw_minikey,sizeof(char),SIZE_VALUE,fd);
+			fclose(fd);
+			raw_minikey[0] = 25;
+			minikey[0] = 'S';
+			for(i = 1; i < SIZE_VALUE; i++)	{
+				raw_minikey[i] = raw_minikey[i] % Ccoinbuffer_length;
+				minikey[i] = Ccoinbuffer[raw_minikey[i]];
+			}
 		}
 	}
 	for(i= 0;i < THREADS; i++)	{
 		if(FLAG_VERIFIED)	{
 			if(SIZE_VALUE == 22)	{
-				s = pthread_create(&tid,NULL,process_verified22,NULL);
+				if(FLAG_RANDOM)	{
+					s = pthread_create(&tid,NULL,process_verified22_random,NULL);
+				}
+				else	{
+					s = pthread_create(&tid,NULL,process_verified22,NULL);
+				}
 			}
 			else	{
-				s = pthread_create(&tid,NULL,process_verified30,NULL);
+				if(FLAG_RANDOM)	{
+					s = pthread_create(&tid,NULL,process_verified30_random,NULL);
+				}
+				else	{
+					s = pthread_create(&tid,NULL,process_verified30,NULL);
+				}
 			}
 		}
 		else	{
-			s = pthread_create(&tid,NULL,process_unverified,NULL);
+			if(FLAG_RANDOM)	{
+				s = pthread_create(&tid,NULL,process_unverified_random,NULL);
+			}
+			else	{
+				s = pthread_create(&tid,NULL,process_unverified,NULL);
+			}
 		}
 	}
 	pthread_join(tid,NULL);
@@ -238,6 +279,84 @@ void *process_verified30(void *vargp)	{
 	return NULL;
 }
 
+void *process_verified22_random(void *vargp)	{
+	char random_buffer[4][2048];
+	char current_minikey[4][40];
+	uint8_t keyvalue[4][32];
+	int i,j,limit;
+	for(i = 0; i < 4; i++)	{
+		current_minikey[i][0] = 'S';
+		current_minikey[i][SIZE_VALUE] = '?';
+	}
+	limit = 2048 -SIZE_VALUE;
+	do {
+		pthread_mutex_lock(&thread_mutex);
+		fread(random_buffer[0],1,2048,fd);
+		fread(random_buffer[1],1,2048,fd);
+		fread(random_buffer[2],1,2048,fd);
+		fread(random_buffer[3],1,2048,fd);
+		pthread_mutex_unlock(&thread_mutex);
+		for(i = 0; i < 4; i++){
+			bin2alphabet((unsigned char*)random_buffer[i],2048);
+		}
+		for(j = 0; j < limit; j++ )	{
+			memcpy(current_minikey[0]+1,random_buffer[0]+j,INCREMENT_OFFSET);
+			memcpy(current_minikey[1]+1,random_buffer[1]+j,INCREMENT_OFFSET);	
+			memcpy(current_minikey[2]+1,random_buffer[2]+j,INCREMENT_OFFSET);
+			memcpy(current_minikey[3]+1,random_buffer[3]+j,INCREMENT_OFFSET);
+			sha256sse_23((uint8_t*)current_minikey[0],(uint8_t*)current_minikey[1],(uint8_t*)current_minikey[2],(uint8_t*)current_minikey[3],keyvalue[0],keyvalue[1],keyvalue[2],keyvalue[3]);
+			for(i = 0; i < 4; i++){
+				if(keyvalue[i][0] == 0x00)	{
+					current_minikey[i][SIZE_VALUE] = '\0';
+					fprintf(stdout,"%s\n",current_minikey[i]);
+					current_minikey[i][SIZE_VALUE] = '?';
+				}
+			}
+		}
+	}while(1);
+	return NULL;
+}
+
+
+void *process_verified30_random(void *vargp)	{
+	char random_buffer[4][2048];
+	char current_minikey[4][40];
+	uint8_t keyvalue[4][32];
+	int i,j,limit;
+	
+	for(i = 0; i < 4; i++)	{
+		current_minikey[i][0] = 'S';
+		current_minikey[i][SIZE_VALUE] = '?';
+	}
+	limit = 2048 -SIZE_VALUE;
+	do {
+		pthread_mutex_lock(&thread_mutex);
+		fread(random_buffer[0],1,2048,fd);
+		fread(random_buffer[1],1,2048,fd);
+		fread(random_buffer[2],1,2048,fd);
+		fread(random_buffer[3],1,2048,fd);
+		pthread_mutex_unlock(&thread_mutex);
+		for(i = 0; i < 4; i++){
+			bin2alphabet((unsigned char*)random_buffer[i],2048);
+		}
+		for(j = 0; j < limit; j++ )	{
+			memcpy(current_minikey[0]+1,random_buffer[0]+j,INCREMENT_OFFSET);
+			memcpy(current_minikey[1]+1,random_buffer[1]+j,INCREMENT_OFFSET);	
+			memcpy(current_minikey[2]+1,random_buffer[2]+j,INCREMENT_OFFSET);
+			memcpy(current_minikey[3]+1,random_buffer[3]+j,INCREMENT_OFFSET);
+			sha256sse_31((uint8_t*)current_minikey[0],(uint8_t*)current_minikey[1],(uint8_t*)current_minikey[2],(uint8_t*)current_minikey[3],keyvalue[0],keyvalue[1],keyvalue[2],keyvalue[3]);
+			for(i = 0; i < 4; i++){
+				if(keyvalue[i][0] == 0x00)	{
+					current_minikey[i][SIZE_VALUE] = '\0';
+					fprintf(stdout,"%s\n",current_minikey[i]);
+					current_minikey[i][SIZE_VALUE] = '?';
+				}
+			}
+		}
+	}while(1);
+	return NULL;
+}
+
 void *process_unverified(void *vargp)	{
 	char current_minikey[4][40];
 	int i;
@@ -260,6 +379,41 @@ void *process_unverified(void *vargp)	{
 		}
 	}while(1);
 	return NULL;
+}
+
+void *process_unverified_random(void *vargp)	{
+	char random_buffer[4][2048];
+	char current_minikey[4][40];
+	int i,j,limit;
+	for(i = 0; i < 4; i++){
+		memset(current_minikey[i],0,40);
+		current_minikey[i][0] = 'S';
+	}
+	limit = 2048 -SIZE_VALUE;
+	do {
+		pthread_mutex_lock(&thread_mutex);
+		fread(random_buffer[0],1,2048,fd);
+		fread(random_buffer[1],1,2048,fd);
+		fread(random_buffer[2],1,2048,fd);
+		fread(random_buffer[3],1,2048,fd);
+		pthread_mutex_unlock(&thread_mutex);
+		for(i = 0; i < 4; i++){
+			bin2alphabet((unsigned char*)random_buffer[i],2048);
+		}
+		for(j = 0; j < limit; j++ )	{
+			for(i = 0; i < 4; i++)	{
+				memcpy(current_minikey[i]+1,random_buffer[i]+j,INCREMENT_OFFSET);
+				fprintf(stdout,"%s\n",current_minikey[i]);							
+			}
+		}
+	}while(1);
+	return NULL;
+}
+
+void bin2alphabet(unsigned char *buffer,int length)	{
+	for(int i = 0; i < length; i++)	{
+		buffer[i] = Ccoinbuffer[(int)buffer[i] % Ccoinbuffer_mod];
+	}
 }
 
 bool increment_minikey_index(char *buffer,unsigned char *rawbuffer,int index)	{

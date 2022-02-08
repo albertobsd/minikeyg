@@ -30,33 +30,39 @@ make
 This program only have a few possibles arguments
 
 ```
-./minikey -u 
+./minikeyg -u 
 ```
 
 the `-u` option is for generate keys without the byte verification, `u` stand for `unverified` keys,  if you don't specify the keys generated will be always valid with the byte verification.
 
 ```
-./minikey -s 22
+./minikeyg -s 22
 ```
 
 the `-s 22` or `-s 30` option is for generate only keys of the specified size, `s` stand for `size`, if you don't specify this option the default value is 22
 
 ```
-./minikey -m SECUN34uVQKk3UkMBAiTLSoLTUWfwS
+./minikeyg -m SECUN34uVQKk3UkMBAiTLSoLTUWfwS
 ```
 the `-m` option is for specify a star key this string need to fit in 22 or 30 characters `m` stand for `minikey`, if you don't specify this option the star value is chossen randomly
 
 ```
-./minikey -a 23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz
+./minikeyg -a 23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz
 ```
 
 the `-a` option is for specify the alphabet to be use I hear that the Series 2 Coin don't have number 1 in his minikey, if you don't specify this optin the defaul alphabet is `123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz` 
 
 ```
-./minikey -t 2
+./minikeyg -t 2
 ```
 
 the `-t` option is for specify the thread number, default number of threads is 1.
+
+```
+./minikeyg -r
+```
+
+the `-r` option is to generate just random keys without any special order, `r` stand for `random`. This option is OS dependent and only works with `/dev/urandom`
 
 Of course you can use all the option together to fit you needs.
 
